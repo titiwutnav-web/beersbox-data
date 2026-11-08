@@ -1,0 +1,28 @@
+name: cleanup
+on:
+  schedule:
+    - cron: "23 */3 * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: cleanup
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - id: clean
+        run: python3 .github/cleanup.py
+      # Squash history so deleted files stop taking space in the repo.
+      - if: steps.clean.outputs.removed != '0' || github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "beersbox-cleanup"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan squashed
+          git add -A
+          git commit -qm "cleanup $(date -u +%F_%H%M)"
+          git push --force-with-lease=main:${{ github.sha }} origin squashed:main \
+            || echo "Someone sent a file during cleanup; trying again next run."
